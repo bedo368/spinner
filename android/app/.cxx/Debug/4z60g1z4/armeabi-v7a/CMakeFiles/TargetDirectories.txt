@@ -1,0 +1,2 @@
+/home/abdullah/Desktop/spinner/android/app/.cxx/Debug/4z60g1z4/armeabi-v7a/CMakeFiles/edit_cache.dir
+/home/abdullah/Desktop/spinner/android/app/.cxx/Debug/4z60g1z4/armeabi-v7a/CMakeFiles/rebuild_cache.dir

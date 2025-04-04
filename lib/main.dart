@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:spinner/slice_list/slices.dart';
+import 'package:spinner/slice_page/widgets/circle_slices_widget.dart';
 
 void main() {
   runApp(const MyApp());
@@ -43,8 +45,8 @@ class _CustomCirclePageState extends State<CustomCirclePage>
     SliceData(sliceNum: 13, image: '13.png'),
   ];
 
-  // حقل إدخال للزاوية
-  final TextEditingController angleController = TextEditingController();
+  // للتحكم في زاوية المؤشر
+  double _selectedAngle = 0.0;
 
   // للتحكم في حركة دوران المؤشر (السهم)
   late AnimationController _pointerController;
@@ -72,12 +74,11 @@ class _CustomCirclePageState extends State<CustomCirclePage>
       });
     });
 
-    // عند انتهاء الأنيميشن، نُفعِّل إضاءة الشريحة
+    // عند انتهاء الأنيميشن، نُفعِّل إضاءة الشريحة
     _pointerController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        final enteredAngle = double.tryParse(angleController.text) ?? 0.0;
         setState(() {
-          _highlightAngleDeg = enteredAngle.clamp(0, 360);
+          _highlightAngleDeg = _selectedAngle;
         });
       }
     });
@@ -89,14 +90,13 @@ class _CustomCirclePageState extends State<CustomCirclePage>
     super.dispose();
   }
 
-  /// عند الضغط على زر Spin!
+  /// بدء دوران المؤشر
   void _startPointerSpin() {
-    // نقرأ الزاوية المدخلة
-    final enteredAngleDeg = double.tryParse(angleController.text) ?? 0.0;
-    final clampedDeg = enteredAngleDeg.clamp(0, 360);
+    // Reset the spinner to start from the top each time.
+    _currentPointerAngle = -math.pi / 2;
 
     // نحولها إلى راديان مع طرح pi/2 لجعل 0 في أعلى الدائرة
-    final targetRad = (clampedDeg * math.pi / 180) - math.pi / 2;
+    final targetRad = (_selectedAngle * math.pi / 180) - math.pi / 2;
 
     // نضيف 7 لفّات إضافية (7 * 2π)
     const extraSpins = 7 * 2 * math.pi;
@@ -158,22 +158,31 @@ class _CustomCirclePageState extends State<CustomCirclePage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // إدخال الزاوية
-            SizedBox(
-              width: 300,
-              child: TextField(
-                controller: angleController,
-                decoration: const InputDecoration(
-                  labelText: 'Enter angle (0..360)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
+            // سلايدر لاختيار الزاوية
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Row(
+                children: [
+                  const Text('Angle: '),
+                  Expanded(
+                    child: Slider(
+                      value: _selectedAngle,
+                      min: 0,
+                      max: 360,
+                      divisions: 36,
+                      label: _selectedAngle.round().toString(),
+                      onChanged: (double value) {
+                        setState(() {
+                          _selectedAngle = value;
+                          // Automatically start spin when slider moves
+                          _startPointerSpin();
+                        });
+                      },
+                    ),
+                  ),
+                  Text('${_selectedAngle.round()}°'),
+                ],
               ),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _startPointerSpin,
-              child: const Text('Spin!'),
             ),
             const SizedBox(height: 20),
 
@@ -215,14 +224,13 @@ class _CustomCirclePageState extends State<CustomCirclePage>
   }
 }
 
-/// يمثل خيار عدد الشرائح + اسم الصورة
+// Helper classes and functions (keep the original implementations)
 class SliceData {
   final int sliceNum;
   final String image;
   SliceData({required this.sliceNum, required this.image});
 }
 
-/// فئة بيانات للشريحة
 class CircleSlice {
   final double startAngle;
   final double sweepAngle;
@@ -236,232 +244,5 @@ class CircleSlice {
     required this.defaultColor,
     required this.activeColor,
     this.childWidget,
-  });
-}
-
-/// رسام الشرائح
-class CircleSlicesPainter extends CustomPainter {
-  final List<CircleSlice> slices;
-  final double? highlightAngle;
-  final double blinkFactor;
-
-  CircleSlicesPainter({
-    required this.slices,
-    this.highlightAngle,
-    this.blinkFactor = 0,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..isAntiAlias = true;
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
-    for (final slice in slices) {
-      paint.color = slice.defaultColor;
-
-      // إن كانت highlightAngle ضمن هذه الشريحة
-      if (highlightAngle != null && _angleInSlice(highlightAngle!, slice)) {
-        paint.color =
-            Color.lerp(slice.defaultColor, slice.activeColor, blinkFactor) ??
-                slice.activeColor;
-      }
-
-      // رسم الشريحة
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        slice.startAngle,
-        slice.sweepAngle,
-        true,
-        paint,
-      );
-    }
-  }
-
-  bool _angleInSlice(double angle, CircleSlice slice) {
-    const epsilon = 0.0001;
-    final endAngle = slice.startAngle + slice.sweepAngle - epsilon;
-    final a = _normalizeAngle(angle);
-    final s = _normalizeAngle(slice.startAngle);
-    final e = _normalizeAngle(endAngle);
-
-    if (s < e) {
-      return a >= s && a <= e;
-    } else {
-      return (a >= s && a <= 2 * math.pi) || (a >= 0 && a <= e);
-    }
-  }
-
-  double _normalizeAngle(double angle) {
-    final twoPi = 2 * math.pi;
-    return (angle % twoPi + twoPi) % twoPi;
-  }
-
-  @override
-  bool shouldRepaint(covariant CircleSlicesPainter oldDelegate) {
-    return oldDelegate.slices != slices ||
-        oldDelegate.highlightAngle != highlightAngle ||
-        oldDelegate.blinkFactor != blinkFactor;
-  }
-}
-
-/// ويدجت لرسم دائرة بخلفية صورة + شرائح
-class CircleSlicesWidget extends StatefulWidget {
-  final String imagePath;
-  final List<CircleSlice> slices;
-  final double? angleInDegrees;
-  final double size;
-
-  const CircleSlicesWidget({
-    super.key,
-    required this.imagePath,
-    required this.slices,
-    this.angleInDegrees,
-    this.size = 300,
-  });
-
-  @override
-  State<CircleSlicesWidget> createState() => _CircleSlicesWidgetState();
-}
-
-class _CircleSlicesWidgetState extends State<CircleSlicesWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _blinkController;
-  late Animation<double> _blinkAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    // أنيميشن تكراري للوميض
-    _blinkController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat(reverse: true);
-
-    _blinkAnimation =
-        Tween<double>(begin: 0.0, end: 1.0).animate(_blinkController);
-  }
-
-  @override
-  void dispose() {
-    _blinkController.dispose();
-    super.dispose();
-  }
-
-  double? get _highlightAngleInRadians {
-    if (widget.angleInDegrees == null) return null;
-    final deg = widget.angleInDegrees!.clamp(0, 360);
-    final rad = deg * math.pi / 180;
-    return rad - math.pi / 2;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset(
-              widget.imagePath,
-              fit: BoxFit.cover,
-            ),
-          ),
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _blinkAnimation,
-              builder: (_, __) {
-                return CustomPaint(
-                  painter: CircleSlicesPainter(
-                    slices: widget.slices,
-                    highlightAngle: _highlightAngleInRadians,
-                    blinkFactor: _blinkAnimation.value,
-                  ),
-                );
-              },
-            ),
-          ),
-          ..._buildSliceWidgets(),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildSliceWidgets() {
-    final list = <Widget>[];
-    final radius = widget.size / 2;
-    final center = Offset(radius, radius);
-
-    for (final slice in widget.slices) {
-      if (slice.childWidget == null) continue;
-
-      double midAngle = slice.startAngle + slice.sweepAngle / 2;
-      final r = radius * 0.65;
-      final dx = center.dx + r * math.cos(midAngle);
-      final dy = center.dy + r * math.sin(midAngle);
-
-      double normAngle = midAngle % (2 * math.pi);
-      if (normAngle < 0) normAngle += 2 * math.pi;
-      if (normAngle > math.pi / 2 && normAngle < 3 * math.pi / 2) {
-        midAngle += math.pi;
-      }
-
-      list.add(
-        Positioned(
-          left: dx,
-          top: dy,
-          child: Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..translate(-25.0, -15.0)
-              ..rotateZ(midAngle),
-            child: slice.childWidget!,
-          ),
-        ),
-      );
-    }
-    return list;
-  }
-}
-
-/// دوال مساعدة لتوليد الشرائح وبياناتها
-List<CircleSlice> generateSlices(int sliceCount) {
-  final sliceColors = [
-    Colors.blue,
-    Colors.orange,
-    Colors.purple,
-    Colors.pink,
-    Colors.green,
-    Colors.red,
-  ];
-  final colors = List.generate(sliceCount, (i) {
-    return sliceColors[i % sliceColors.length];
-  });
-  final sliceData = generateSliceData(sliceCount);
-
-  return List.generate(sliceCount, (i) {
-    final data = sliceData[i];
-    final color = colors[i];
-
-    return CircleSlice(
-      startAngle: -math.pi / 2 + i * (2 * math.pi / sliceCount),
-      sweepAngle: 2 * math.pi / sliceCount,
-      defaultColor: color.withOpacity(0.0),
-      activeColor: color,
-      childWidget: Text(
-        data['value'] ?? '',
-        style: const TextStyle(color: Colors.white, fontSize: 12),
-      ),
-    );
-  });
-}
-
-List<Map<String, String>> generateSliceData(int sliceCount) {
-  return List.generate(sliceCount, (i) {
-    return {
-      'label': 'Slice ${i + 1}',
-      'value': '${(10 + i * 5)}%',
-    };
   });
 }

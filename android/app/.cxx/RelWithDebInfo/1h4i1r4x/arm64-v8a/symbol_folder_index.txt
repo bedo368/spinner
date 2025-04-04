@@ -1,0 +1,1 @@
+/home/abdullah/Desktop/spinner/build/app/intermediates/cxx/RelWithDebInfo/1h4i1r4x/obj/arm64-v8a
