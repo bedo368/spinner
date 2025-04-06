@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:spinner/models/circle_clice.dart';
 import 'package:spinner/painter/circle_slices_painter.dart';
@@ -7,14 +8,16 @@ import 'package:spinner/slice_list/slices.dart';
 /// ويدجت لرسم دائرة مع شرائح فوق خلفية صورة
 /// + إضافة ويدجات فوق مراكز الشرائح (childWidget).
 class CircleSlicesWidget extends StatefulWidget {
-  final String imagePath;
+  final String? imagePath;
+  final File? imageFile;
   final List<CircleSlice> slices;
   final double? angleInDegrees; // 0 تعني أعلى الدائرة أو يمكن أن تكون null
   final double size; // عرض/ارتفاع الدائرة
 
   const CircleSlicesWidget({
     super.key,
-    required this.imagePath,
+    this.imagePath,
+    this.imageFile,
     required this.slices,
     this.angleInDegrees,
     this.size = 300,
@@ -64,10 +67,28 @@ class _CircleSlicesWidgetState extends State<CircleSlicesWidget>
         children: [
           // صورة الخلفية
           Positioned.fill(
-            child: Image.asset(
-              widget.imagePath,
-              fit: BoxFit.cover,
-            ),
+            child: widget.imageFile != null
+                ? Image.file(
+                    widget.imageFile!,
+                    fit: BoxFit.cover,
+                  )
+                : widget.imagePath != null
+                    ? Image.asset(
+                        widget.imagePath!,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: Colors.grey[300],
+                        child: const Center(
+                          child: Text(
+                            'No Image',
+                            style: TextStyle(
+                              color: Colors.black54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
           ),
           // رسم الشرائح مع الوميض
           Positioned.fill(

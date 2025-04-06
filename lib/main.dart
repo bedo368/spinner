@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:spinner/slice_list/slices.dart';
 import 'package:spinner/slice_page/widgets/circle_slices_widget.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,7 +23,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// صفحة رئيسية مع Drawer لاختيار عدد الشرائح والصورة + دائرة بشرائح + مؤشر (سهم) فوق الدائرة
+/// صفحة رئيسية مع إمكانية اختيار صورة مخصصة وعدد الشرائح + دائرة بشرائح + مؤشر (سهم) فوق الدائرة
 class CustomCirclePage extends StatefulWidget {
   const CustomCirclePage({super.key});
 
@@ -35,25 +37,21 @@ class _CustomCirclePageState extends State<CustomCirclePage>
   int selectedSlices = 6;
   // الصورة الافتراضية
   String selectedImage = 'assets/6.png';
+  // ملف الصورة المختارة من المستخدم
+  File? userImage;
+  // التحكم في عدد الشرائح
+  final TextEditingController _slicesController =
+      TextEditingController(text: '6');
 
-  // خيارات الشرائح والصور في الدّرّاور
-  final List<SliceData> sliceOptions = [
-    SliceData(sliceNum: 4, image: '4.png'),
-    SliceData(sliceNum: 6, image: '6.png'),
-    SliceData(sliceNum: 5, image: '5.png'),
-    SliceData(sliceNum: 8, image: '8.png'),
-    SliceData(sliceNum: 13, image: '13.png'),
-  ];
+  // للتحكم في زاوية الدوران - نبدأ من 1 وليس 0
+  double _selectedAngle = 1.0;
 
-  // للتحكم في زاوية المؤشر
-  double _selectedAngle = 0.0;
+  // للتحكم في حركة دوران الدائرة
+  late AnimationController _circleController;
+  late Animation<double> _circleAnimation;
 
-  // للتحكم في حركة دوران المؤشر (السهم)
-  late AnimationController _pointerController;
-  late Animation<double> _pointerAnimation;
-
-  // زاوية المؤشر الحالية (بالراديان). نبدأ من أعلى الدائرة = -pi/2
-  double _currentPointerAngle = -math.pi / 2;
+  // زاوية دوران الدائرة الحالية (بالراديان)
+  double _currentCircleAngle = 0.0;
 
   // الزاوية (بالدرجات) التي نُضيئها بعد انتهاء الدوران. null = لا إضاءة
   double? _highlightAngleDeg;
@@ -61,24 +59,25 @@ class _CustomCirclePageState extends State<CustomCirclePage>
   @override
   void initState() {
     super.initState();
-    // نجعل مدة اللف 9 ثواني
-    _pointerController = AnimationController(
+    // نغير مدة اللف إلى 2 ثانية
+    _circleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 9),
+      duration: const Duration(seconds: 2),
     );
 
-    // عند تغير قيمة الأنيميشن، نغيّر زاوية المؤشر
-    _pointerController.addListener(() {
+    // عند تغير قيمة الأنيميشن، نغيّر زاوية الدائرة
+    _circleController.addListener(() {
       setState(() {
-        _currentPointerAngle = _pointerAnimation.value;
+        _currentCircleAngle = _circleAnimation.value;
       });
     });
 
     // عند انتهاء الأنيميشن، نُفعِّل إضاءة الشريحة
-    _pointerController.addStatusListener((status) {
+    _circleController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         setState(() {
-          _highlightAngleDeg = _selectedAngle;
+          // نستخدم 360 - الزاوية لأن الدائرة تدور بعكس اتجاه المؤشر
+          _highlightAngleDeg = 360 - _selectedAngle;
         });
       }
     });
@@ -86,38 +85,59 @@ class _CustomCirclePageState extends State<CustomCirclePage>
 
   @override
   void dispose() {
-    _pointerController.dispose();
+    _circleController.dispose();
+    _slicesController.dispose();
     super.dispose();
   }
 
-  /// بدء دوران المؤشر
-  void _startPointerSpin() {
-    // Reset the spinner to start from the top each time.
-    _currentPointerAngle = -math.pi / 2;
-
-    // نحولها إلى راديان مع طرح pi/2 لجعل 0 في أعلى الدائرة
-    final targetRad = (_selectedAngle * math.pi / 180) - math.pi / 2;
-
-    // نضيف 7 لفّات إضافية (7 * 2π)
-    const extraSpins = 7 * 2 * math.pi;
-    final finalTarget = targetRad + extraSpins;
+  /// بدء دوران الدائرة
+  void _startCircleSpin() {
+    // نحولها إلى راديان
+    final targetRad = _selectedAngle * math.pi / 180;
 
     // نعطّل إضاءة الشريحة أثناء الحركة
     _highlightAngleDeg = null;
 
     // Tween من زاويتنا الحالية إلى الهدف النهائي
-    _pointerAnimation = Tween<double>(
-      begin: _currentPointerAngle,
-      end: finalTarget,
+    _circleAnimation = Tween<double>(
+      begin: _currentCircleAngle, // نبدأ من الزاوية الحالية
+      end: targetRad,
     ).animate(
       CurvedAnimation(
-        parent: _pointerController,
+        parent: _circleController,
         curve: Curves.easeOutExpo, // منحنى تباطؤ قوي
       ),
     );
 
     // بدء الحركة من الصفر
-    _pointerController.forward(from: 0.0);
+    _circleController.forward(from: 0.0);
+  }
+
+  /// اختيار صورة من المعرض
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        userImage = File(image.path);
+      });
+    }
+  }
+
+  /// تحديث عدد الشرائح
+  void _updateSlices() {
+    final int? slices = int.tryParse(_slicesController.text);
+    if (slices != null && slices > 1) {
+      setState(() {
+        selectedSlices = slices;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Please enter a valid number (greater than 1)')),
+      );
+    }
   }
 
   @override
@@ -126,98 +146,132 @@ class _CustomCirclePageState extends State<CustomCirclePage>
       appBar: AppBar(
         title: const Text('Custom Circle Slices'),
       ),
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                'Settings',
-                style: TextStyle(color: Colors.white, fontSize: 24),
-              ),
-            ),
-            const ListTile(title: Text('Select Number of Slices')),
-            ...sliceOptions.map((slices) {
-              return ListTile(
-                title: Text('${slices.sliceNum} Slices'),
-                onTap: () {
-                  setState(() {
-                    selectedSlices = slices.sliceNum;
-                    selectedImage = 'assets/${slices.image}';
-                  });
-                  Navigator.pop(context);
-                },
-              );
-            }),
-            const Divider(),
-            const ListTile(title: Text('Select Image')),
-          ],
-        ),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // سلايدر لاختيار الزاوية
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                children: [
-                  const Text('Angle: '),
-                  Expanded(
-                    child: Slider(
-                      value: _selectedAngle,
-                      min: 0,
-                      max: 360,
-                      divisions: 36,
-                      label: _selectedAngle.round().toString(),
-                      onChanged: (double value) {
-                        setState(() {
-                          _selectedAngle = value;
-                          // Automatically start spin when slider moves
-                          _startPointerSpin();
-                        });
-                      },
-                    ),
-                  ),
-                  Text('${_selectedAngle.round()}°'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20),
 
-            // الدائرة + المؤشر
-            SizedBox(
-              width: 300,
-              height: 300,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // الدائرة والشرائح
-                  CircleSlicesWidget(
-                    imagePath: selectedImage,
-                    slices: generateSlices(selectedSlices),
-                    angleInDegrees: _highlightAngleDeg,
-                    size: 300,
-                  ),
-                  // المؤشر (السهم الأحمر) أعلى الدائرة
-                  Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      // ندور المؤشر بالزاوية الحالية
-                      ..rotateZ((math.pi / 2) + _currentPointerAngle)
-                      // نرفعه لأعلى بمقدار نصف قطر الدائرة (150)
-                      ..translate(0.0, -150.0),
-                    child: const Icon(
-                      Icons.arrow_drop_down,
-                      size: 40,
-                      color: Colors.red,
+              // اختيار الصورة
+              ElevatedButton(
+                onPressed: _pickImage,
+                child: const Text('Choose Wheel Image'),
+              ),
+
+              const SizedBox(height: 10),
+
+              // عرض الصورة المختارة
+              if (userImage != null)
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    image: DecorationImage(
+                      image: FileImage(userImage!),
+                      fit: BoxFit.cover,
                     ),
                   ),
-                ],
+                )
+              else
+                const Text('No image selected'),
+
+              const SizedBox(height: 20),
+
+              // تحديد عدد الشرائح
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 50),
+                child: Row(
+                  children: [
+                    const Text('Number of Slices: '),
+                    Expanded(
+                      child: TextField(
+                        controller: _slicesController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _updateSlices,
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 20),
+
+              // سلايدر لاختيار الزاوية
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Row(
+                  children: [
+                    const Text('Angle: '),
+                    Expanded(
+                      child: Slider(
+                        value: _selectedAngle,
+                        min: 1,
+                        max: 360,
+                        divisions: 36,
+                        label: _selectedAngle.round().toString(),
+                        onChanged: (double value) {
+                          setState(() {
+                            _selectedAngle = value;
+                            // بدء دوران الدائرة عند تحريك السلايدر
+                            _startCircleSpin();
+                          });
+                        },
+                      ),
+                    ),
+                    Text('${_selectedAngle.round()}°'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // الدائرة + المؤشر
+              SizedBox(
+                width: 300,
+                height: 300,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // الدائرة والشرائح - الآن تدور
+                    Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..rotateZ(_currentCircleAngle),
+                      child: CircleSlicesWidget(
+                        imagePath: userImage != null ? null : selectedImage,
+                        imageFile: userImage,
+                        slices: generateSlices(selectedSlices),
+                        angleInDegrees: _highlightAngleDeg,
+                        size: 300,
+                      ),
+                    ),
+                    // المؤشر (السهم الأحمر) - ثابت أعلى الدائرة
+                    Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        // نرفعه لأعلى بمقدار نصف قطر الدائرة (150)
+                        ..translate(0.0, -150.0),
+                      child: const Icon(
+                        Icons.arrow_drop_down,
+                        size: 40,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
