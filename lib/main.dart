@@ -252,7 +252,7 @@ class _CustomCirclePageState extends State<CustomCirclePage>
                         imagePath: userImage != null ? null : selectedImage,
                         imageFile: userImage,
                         slices: generateSlices(selectedSlices),
-                        angleInDegrees: _highlightAngleDeg,
+                        angleInDegrees: null,
                         size: 300,
                       ),
                     ),
