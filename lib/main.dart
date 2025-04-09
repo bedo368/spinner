@@ -76,8 +76,8 @@ class _CustomCirclePageState extends State<CustomCirclePage>
     _circleController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         setState(() {
-          // نستخدم 360 - الزاوية لأن الدائرة تدور بعكس اتجاه المؤشر
-          _highlightAngleDeg = 360 - _selectedAngle;
+          // نستخدم الزاوية كما هي لأن الدائرة تدور الآن مع اتجاه المؤشر (عكس عقارب الساعة)
+          _highlightAngleDeg = _selectedAngle;
         });
       }
     });
@@ -99,9 +99,10 @@ class _CustomCirclePageState extends State<CustomCirclePage>
     _highlightAngleDeg = null;
 
     // Tween من زاويتنا الحالية إلى الهدف النهائي
+    // نستخدم قيمة سالبة للـ end لجعل الدوران عكس اتجاه عقارب الساعة
     _circleAnimation = Tween<double>(
       begin: _currentCircleAngle, // نبدأ من الزاوية الحالية
-      end: targetRad,
+      end: -targetRad, // قيمة سالبة للدوران عكس عقارب الساعة
     ).animate(
       CurvedAnimation(
         parent: _circleController,
